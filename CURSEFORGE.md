@@ -48,8 +48,24 @@ legal advice, just the reason not to be surprised.
 >
 > Source and full history: https://github.com/SnowMewKat/wow-farmmap (MIT)
 
-**The repo is private right now.** Drop that last line, or make the repo public,
-before publishing. Do not link people at a 404.
+The repo is public, so that source link resolves.
+
+## Screenshots for the gallery
+
+These have to come from Snow, because the addon only runs on her client.
+
+- **They must be genuine captures.** Their AI clause is specifically about
+  showcase images that were generated, edited or enhanced and could
+  misrepresent how the mod looks. A real screenshot needs no disclaimer; an AI
+  touched-up one does, and is not worth the trouble.
+- **The shot that sells it** is mid-flight with nodes only on: ore and herb
+  blips floating over the world with no map behind them. That is the whole
+  pitch in one image, and it is hard to describe in words.
+- **Worth including too:** the options panel, and a before and after pair
+  showing the normal minimap versus the node view.
+- Crop out anything personal: character name, guild chat, Battle.net friends,
+  real names in the chat log. Chat is the usual culprit.
+- 1920x1080 or larger, PNG or JPG.
 
 ## Listing details, already set in the TOC
 

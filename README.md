@@ -22,34 +22,23 @@ You should end up with `Interface/AddOns/FarmMap/FarmMap.toc`.
 
 ## Working on it
 
-The source lives here and the game reads it through a directory junction, so
-there is no copy step: edit a file, `/reload` in game, done.
-
-On Hades (the Windows desktop) that junction already exists:
-
-```
-C:\Program Files (x86)\World of Warcraft\_retail_\Interface\AddOns\FarmMap
-  -> C:\Users\setos\OneDrive\Desktop\Claude Code\wow-farmmap\FarmMap
-```
-
-### On the other machine
-
-The repo is the only thing that travels, so start by cloning it:
+Point the game at your clone with a junction or a symlink and there is no copy
+step: edit a file, `/reload` in game, done.
 
 ```bash
 git clone https://github.com/SnowMewKat/wow-farmmap.git
 ```
 
-Then point the game at it. On Windows, a junction needs no admin rights:
+On Windows, a junction needs no admin rights:
 
 ```bash
-cmd /c mklink /J "C:\Program Files (x86)\World of Warcraft\_retail_\Interface\AddOns\FarmMap" "<repo>\FarmMap"
+cmd /c mklink /J "C:\Program Files (x86)\World of Warcraft\_retail_\Interface\AddOns\FarmMap" "<path to clone>\FarmMap"
 ```
 
 On macOS:
 
 ```bash
-ln -s "<repo>/FarmMap" "/Applications/World of Warcraft/_retail_/Interface/AddOns/FarmMap"
+ln -s "<path to clone>/FarmMap" "/Applications/World of Warcraft/_retail_/Interface/AddOns/FarmMap"
 ```
 
 Everything needed to rebuild the artwork and run the tests is committed, so a
