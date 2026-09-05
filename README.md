@@ -1,9 +1,10 @@
 # FarmMap
 
 A small, dependency-free WoW Retail addon. While you are mounted or in Druid
-Travel / Flight Form, it enlarges the minimap, centres it on screen and makes it
-semi-transparent, so gathering nodes are easy to see while flying. The moment
-you dismount it puts everything back.
+Travel / Flight Form, it moves the minimap's contents to the centre of the
+screen, enlarged and semi-transparent, so gathering nodes are easy to see while
+flying. The minimap buttons stay home in the corner, and everything is put back
+the moment you dismount.
 
 Built and verified against **retail 12.1.0** (`## Interface: 120100`).
 
@@ -34,16 +35,18 @@ around the ring.
 | `/farmmap` | Toggle on and off |
 | `/farmmap config` | Open the options panel |
 | `/farmmap test` | Force the overlay visible, ignoring mount state |
-| `/farmmap mode map` | Move only the map circle (default) |
+| `/farmmap mode map` | Move only the map contents (default) |
 | `/farmmap mode cluster` | Move the whole minimap, zone text and buttons included |
-| `/farmmap buttons` | Toggle hiding minimap buttons while farming |
+| `/farmmap buttons` | Dock the minimap buttons in the corner, or hide them outright |
+| `/farmmap ring` | Show or hide the corner socket ring |
 | `/farmmap size 900` | Width of the map circle in UI units, 100 to 1600 |
 | `/farmmap alpha 0.6` | Opacity, 0.1 to 1.0 |
 | `/farmmap hud 1.0` | Scale of FarmMap's own button and panel, 0.5 to 4.0 |
+| `/farmmap dump` | List the minimap's children and how each one is classified |
 | `/farmmap reset` | Force the minimap back to normal right now |
 | `/farmmap status` | Print the current state |
 
-Defaults: enabled, size 900, alpha 0.6, map mode, buttons hidden while farming.
+Defaults: enabled, size 900, alpha 0.6, map mode, buttons docked, ring on.
 
 ## Can it copy the inside of the minimap instead of moving it?
 
@@ -56,23 +59,51 @@ Creating a second `Minimap` frame does not help either: the gathering blips and
 every pin addon are bound to the real one, which is exactly what you need to see.
 
 So the overlay **is** the real minimap, moved and scaled. What FarmMap can do is
-be surgical about *how much* of it moves, which is what the two modes are:
+be surgical about *what comes along*, which is the whole trick in map mode.
 
-- **`map` (default)** moves and scales `Minimap` alone. The zone name, the
-  clock and the tracking button stay in the corner. Minimap buttons are hidden
-  while you fly, so what lands in the middle of your screen is just terrain and
-  gathering nodes. This is as close to "only the inside" as the API allows.
-- **`cluster`** moves the whole `MinimapCluster`, furniture and all. This is the
-  original behaviour, kept because it looks good if you like the buttons ringing
-  the big map.
+## Docking, and why it exists
+
+Minimap buttons are children of `Minimap`, anchored out on the ring. Scale the
+map 4.5x and they fly out to 4.5x the radius, scattering across the screen. That
+is exactly what happened on the first attempt.
+
+The fix is not to hide them, it is to give them somewhere to stay. FarmMap
+creates a **dock**: an invisible stand-in frame sitting precisely where the
+minimap normally is, wearing a gold socket ring so the corner still reads as a
+minimap. When the overlay goes up, every button is:
+
+- detached from the map's scale and opacity with `SetIgnoreParentScale` and
+  `SetIgnoreParentAlpha`, so it keeps its normal size and stays fully opaque,
+- re-anchored from `Minimap` onto the dock, so it does not move,
+- left **clickable**, because it is in the corner where clicking it is the point.
+
+It stays a child of `Minimap` throughout. Nothing an addon believes about its own
+button changes, and on dismount every anchor, flag and parent goes back exactly.
+
+### Telling a button apart from a gathering pin
+
+This is the part that has to be right, because docking a gathering pin would
+strand a node icon in the corner. Three tests, in order:
+
+1. **Unnamed?** Then it is map content. Pins are usually created without a name,
+   buttons are almost always named.
+2. **Does the name look like a pin** (`Pin`, `Node`, `Blip`, `GatherMate`,
+   `HandyNotes`, `POI`, `Arrow`)? Then it is map content, no matter where it sits.
+   This is what protects an edge-clamped pin, which sits right on the ring and
+   would otherwise look exactly like a button.
+3. **Otherwise, where is it?** Anything named and sitting outside the ring radius
+   is furniture. This is the test that catches addon buttons FarmMap has never
+   heard of, which was the real problem: a hardcoded name list missed most of them.
+
+`/farmmap dump` prints the verdict for every child of the minimap, so if
+something is misfiled it takes one command to see it.
 
 ## How it works
 
 In both modes FarmMap **scales** and never resizes. Pin addons place their nodes
 from `Minimap:GetWidth()` (GatherMate2 does exactly this, in `Display.lua`), so
 changing that width would scatter every gathering pin. Scaling leaves the maths
-untouched and carries the pins along at the new size for free. This is also how
-Leatrix_Plus sizes the minimap, so it is a well-trodden path on current retail.
+untouched and carries the pins along at the new size for free.
 
 Scale is relative to the parent, so map mode divides out whatever scale the
 cluster already carries. That means `size 900` is 900 on screen whether or not
@@ -80,12 +111,12 @@ you have moved Edit Mode's minimap size slider.
 
 Everything that gets changed is read back first and restored verbatim: scale,
 alpha, the clamped-to-screen flag, every anchor point including which frame it
-was relative to, which frames had mouse and wheel input, and which buttons were
-showing.
+was relative to, the ignore-parent-scale and ignore-parent-alpha flags, which
+frames had mouse and wheel input, and which buttons were showing.
 
-Mouse input is switched off across the moved frame while the overlay is up, so
-it never eats clicks, drags or scroll, and camera and character control work
-straight through it.
+Mouse input is switched off across the moved map while the overlay is up, so it
+never eats clicks, drags or scroll, and camera and character control work
+straight through it. Docked furniture is deliberately skipped.
 
 Edit Mode owns the minimap anchors and can re-apply them underneath an addon.
 FarmMap does not fight it: a 0.25s ticker notices drift and re-asserts, and
@@ -96,26 +127,28 @@ an event.
 Travel forms treated as mounted, from `GetShapeshiftFormID()`: `3` Travel,
 `4` Aquatic, `27` Swift Flight, `29` Flight.
 
-## The icon
+## Art
 
-`FarmMap/Media/farmmap-icon.tga` is generated from `art/farmmap-icon-source.png`.
-The client cannot read PNG, so the source is keyed and converted:
+Both textures are generated, because the client cannot read PNG:
 
 ```bash
-python tools/make_icon.py art/farmmap-icon-source.png
+python tools/make_icon.py art/farmmap-icon-source.png   # the minimap button
+python tools/make_ring.py                               # the corner socket ring
 ```
 
-The art is an opaque medallion on black. Keying every dark pixel would punch
-holes in the artwork's own outlines, so the converter flood fills inwards from
-the four corners: only black connected to the edge becomes transparent.
+The icon source is an opaque medallion on black. Keying every dark pixel would
+punch holes in the artwork's own outlines, so the converter flood fills inwards
+from the four corners: only black connected to the edge becomes transparent.
 
 ## Tests
 
 The real addon files are driven headlessly against a stub of the WoW API
-(`lupa`, a real Lua runtime): mount, dismount, all four travel forms, non-travel
-forms, missed events, mode switching mid-flight, Edit Mode drift, the minimap
+(`lupa`, a real Lua runtime), with the minimap laid out with real geometry so the
+furniture classification is genuinely exercised. 136 checks covering mount,
+dismount, all four travel forms, docking versus pin survival, the edge-clamped
+pin case, mode switching mid-flight, Edit Mode drift and scaling, the minimap
 button, every slash command, SavedVariables migration and logout. The core
-assertion is a diff proving the minimap is restored exactly.
+assertion is a diff proving everything is restored exactly.
 
 ```bash
 python -m venv .venv && .venv/Scripts/pip install lupa pillow && .venv/Scripts/python tests/run.py
@@ -125,10 +158,11 @@ python -m venv .venv && .venv/Scripts/pip install lupa pillow && .venv/Scripts/p
 
 - A gathering pin created *while* the overlay is already up keeps its mouse
   input, so it can still take a click. Pins that existed before it are handled.
-- Minimap buttons are hidden while farming, by design. Turn it off with
-  `/farmmap buttons` if you would rather they came along to the middle.
-- In map mode the minimap's ring border may stay behind in the corner, since it
-  belongs to the cluster rather than to the map. Switch to `cluster` mode if you
-  want the framed look.
+- A button dragged inside the ring radius, and not named like a LibDBIcon or a
+  Blizzard button, will be treated as map content and travel with the map.
+  `/farmmap dump` will show it. Tell me the name and it goes on the list.
+- Blizzard's own minimap ring belongs to the map, so it travels to the centre.
+  The dock draws its own gold ring in its place. Turn that off with
+  `/farmmap ring` if you would rather have nothing there.
 - `/farmmap reset` restores the minimap, but if you are still mounted the
   overlay comes back within 0.25s. Use `/farmmap` to actually turn it off.

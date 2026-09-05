@@ -16,8 +16,19 @@ local atan2 = math.atan2 or math.atan
 -- Minimap button
 --------------------------------------------------------------------------------
 
+-- While the overlay is up our button has been docked into the corner along
+-- with every other minimap button, so it must orbit the dock, not the map that
+-- is now filling the screen.
+local function RingAnchor()
+	if ns.dock and ns.IsActive and ns.IsActive() and not FarmMapDB.hideButtons then
+		return ns.dock
+	end
+	return Minimap
+end
+
 local function PositionButton()
 	if not button or not Minimap then return end
+	local anchor = RingAnchor()
 	local angle = math.rad(FarmMapDB.button.angle or 200)
 	local radius = (Minimap:GetWidth() / 2) + 8
 	-- SetPoint offsets are in the button's own scale space, so divide the
@@ -25,7 +36,7 @@ local function PositionButton()
 	local s = button:GetScale()
 	if not s or s <= 0 then s = 1 end
 	button:ClearAllPoints()
-	button:SetPoint("CENTER", Minimap, "CENTER",
+	button:SetPoint("CENTER", anchor, "CENTER",
 		(math.cos(angle) * radius) / s, (math.sin(angle) * radius) / s)
 end
 
@@ -76,9 +87,10 @@ local function BuildButton()
 	button:SetScript("OnDragStart", function(self)
 		self.dragging = true
 		self:SetScript("OnUpdate", function()
-			local mx, my = Minimap:GetCenter()
+			local anchor = RingAnchor()
+			local mx, my = anchor:GetCenter()
 			local px, py = GetCursorPosition()
-			local scale = Minimap:GetEffectiveScale()
+			local scale = anchor:GetEffectiveScale()
 			if not mx or not scale or scale <= 0 then return end
 			px, py = px / scale, py / scale
 			FarmMapDB.button.angle = math.deg(atan2(py - my, px - mx))
@@ -159,7 +171,7 @@ local function BuildPanel()
 	panel = CreateFrame("Frame", "FarmMapOptionsPanel", UIParent, "BackdropTemplate")
 	ns.panel = panel
 
-	panel:SetSize(300, 286)
+	panel:SetSize(300, 314)
 	panel:SetPoint("CENTER")
 	panel:SetFrameStrata("DIALOG")
 	panel:SetMovable(true)
@@ -202,9 +214,14 @@ local function BuildPanel()
 		function(v) ns.SetMode(v and "cluster" or "map") end)
 
 	y = y - 28
-	MakeCheckbox(panel, "Hide buttons while farming", 20, y,
+	MakeCheckbox(panel, "Hide buttons instead of docking", 20, y,
 		function() return FarmMapDB.hideButtons end,
 		function(v) ns.SetHideButtons(v) end)
+
+	y = y - 28
+	MakeCheckbox(panel, "Show the corner ring", 20, y,
+		function() return FarmMapDB.ring end,
+		function(v) ns.SetRing(v) end)
 
 	y = y - 36
 	MakeStepper(panel, "Map size", 24, y, 25, 100, 1600,

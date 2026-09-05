@@ -24,11 +24,12 @@ function Region:SetJustifyH() end
 function Region:SetWidth() end
 function Region:SetHeight() end
 function Region:SetSize() end
-function Region:Show() end
-function Region:Hide() end
+function Region:Show() self.shown = true end
+function Region:Hide() self.shown = false end
+function Region:IsShown() return self.shown end
 
 local function NewRegion()
-	return setmetatable({}, Region)
+	return setmetatable({ shown = true }, Region)
 end
 
 local function NewFrame(name, parent)
@@ -49,6 +50,9 @@ local function NewFrame(name, parent)
 	f.events = {}
 	f.width = 100
 	f.height = 100
+	f.cx, f.cy = 500, 400          -- centre, in this stub's flat screen space
+	f.ignoreScale = false
+	f.ignoreAlpha = false
 	if parent then table.insert(parent.children, f) end
 	return f
 end
@@ -90,11 +94,15 @@ function Frame:GetEffectiveScale()
 	while p do s = s * p.scale; p = p.parent end
 	return s
 end
-function Frame:GetCenter() return 500, 400 end
+function Frame:GetCenter() return self.cx, self.cy end
 function Frame:IsShown() return self.shown end
 function Frame:Show() self.shown = true end
 function Frame:Hide() self.shown = false end
 function Frame:SetShown(v) self.shown = v and true or false end
+function Frame:SetIgnoreParentScale(v) self.ignoreScale = v and true or false end
+function Frame:IsIgnoringParentScale() return self.ignoreScale end
+function Frame:SetIgnoreParentAlpha(v) self.ignoreAlpha = v and true or false end
+function Frame:IsIgnoringParentAlpha() return self.ignoreAlpha end
 function Frame:RegisterEvent(e) self.events[e] = true end
 function Frame:UnregisterEvent(e) self.events[e] = nil end
 function Frame:SetScript(k, fn) self.scripts[k] = fn end
@@ -128,36 +136,67 @@ function Frame:SetHighlightTexture() end
 
 STUB.NewFrame = NewFrame
 
--- The globals FarmMap touches.
+--------------------------------------------------------------------------------
+-- The minimap, laid out with real geometry so the furniture test is exercised.
+-- Minimap centre is (500, 400) and its width is 198, so the ring radius is 99.
+--------------------------------------------------------------------------------
+
 UIParent = NewFrame("UIParent", nil)
 UIParent.width = 1920
-function UIParent:GetCenter() return 960, 540 end
-function UIParent:GetEffectiveScale() return 1 end
+UIParent.cx, UIParent.cy = 960, 540
 
 MinimapCluster = NewFrame("MinimapCluster", UIParent)
 MinimapCluster.width = 220
+MinimapCluster.cx, MinimapCluster.cy = 500, 410
 MinimapCluster:SetPoint("TOPRIGHT", UIParent, "TOPRIGHT", -20, -30)
 MinimapCluster.mouse = true
 
 Minimap = NewFrame("Minimap", MinimapCluster)
-Minimap.width = 198
+Minimap.width, Minimap.height = 198, 198
+Minimap.cx, Minimap.cy = 500, 400
 Minimap.mouse = true
 Minimap.wheel = true
 Minimap:SetPoint("CENTER", MinimapCluster, "CENTER", 0, -10)
-function Minimap:GetCenter() return 500, 380 end
 
--- Cluster furniture that must stay put in "map" mode.
+-- Cluster furniture. Never moves in map mode because it is not a child of Minimap.
 ClusterHeader = NewFrame("MinimapZoneTextButton", MinimapCluster)
 ClusterHeader.mouse = true
 
--- An addon button on the ring, and a gathering pin. The pin must survive the
--- furniture pass; the button must not.
+-- On the ring, named by LibDBIcon: furniture by name AND by geometry.
 AddonButton = NewFrame("LibDBIcon10_SomeAddon", Minimap)
+AddonButton.cx, AddonButton.cy = 607, 400   -- 107 from centre, outside the ring
 AddonButton.mouse = true
+AddonButton:SetPoint("CENTER", Minimap, "CENTER", 107, 0)
+
+-- On the ring, named by nothing we recognise. ONLY the geometric test can
+-- catch this one, and Snow's screenshot was full of them.
+StrayButton = NewFrame("RareScannerMinimapToggle", Minimap)
+StrayButton.cx, StrayButton.cy = 500, 512   -- 112 from centre, outside the ring
+StrayButton.mouse = true
+StrayButton:SetPoint("CENTER", Minimap, "CENTER", 0, 112)
+
+-- A gathering pin well inside the ring.
 GatherPin = NewFrame("GatherMatePin1", Minimap)
+GatherPin.cx, GatherPin.cy = 530, 420
 GatherPin.mouse = true
+GatherPin:SetPoint("CENTER", Minimap, "CENTER", 30, 20)
+
+-- A gathering pin clamped to the very edge, so geometry says "outside" but the
+-- name says pin. It MUST travel with the map or nodes end up stuck in a corner.
+ClampedPin = NewFrame("GatherMatePin2", Minimap)
+ClampedPin.cx, ClampedPin.cy = 500, 505     -- 105 from centre, outside the ring
+ClampedPin.mouse = true
+ClampedPin:SetPoint("CENTER", Minimap, "CENTER", 0, 105)
+
+-- An unnamed child on the ring. Unnamed means map content, so leave it alone.
+UnnamedChild = NewFrame(nil, Minimap)
+UnnamedChild.cx, UnnamedChild.cy = 610, 400
+UnnamedChild:SetPoint("CENTER", Minimap, "CENTER", 110, 0)
+
 CalendarButton = NewFrame("GameTimeFrame", Minimap)
+CalendarButton.cx, CalendarButton.cy = 570, 470
 CalendarButton.mouse = true
+CalendarButton:SetPoint("CENTER", Minimap, "CENTER", 70, 70)
 
 EditModeManagerFrame = NewFrame("EditModeManagerFrame", UIParent)
 EditModeManagerFrame.shown = false
@@ -166,6 +205,9 @@ CreateFrame = function(frameType, name, parent, template)
 	local f = NewFrame(name, parent)
 	f.frameType = frameType
 	f.template = template
+	-- Real Buttons accept mouse input the moment they exist, which is what
+	-- makes "is this still clickable after docking" a meaningful question.
+	if frameType == "Button" or frameType == "CheckButton" then f.mouse = true end
 	STUB.lastCreated = f
 	return f
 end
@@ -201,35 +243,41 @@ function STUB.Slash(args)
 	SlashCmdList["FARMMAP"](args or "")
 end
 
--- Snapshot every piece of state FarmMap is allowed to touch, so a test can
--- prove the restore is exact. Covers BOTH candidate targets.
+--------------------------------------------------------------------------------
+-- Snapshot / diff, so a test can prove the restore is exact
+--------------------------------------------------------------------------------
+
 local function snapFrame(frame)
-	local s = { scale = frame.scale, alpha = frame.alpha, clamped = frame.clamped, points = {} }
+	local s = {
+		scale = frame.scale, alpha = frame.alpha, clamped = frame.clamped,
+		ignoreScale = frame.ignoreScale, ignoreAlpha = frame.ignoreAlpha,
+		mouse = frame.mouse, wheel = frame.wheel, shown = frame.shown,
+		points = {},
+	}
 	for i, pt in ipairs(frame.points) do
-		s.points[i] = { pt[1], pt[2] and pt[2].name or "nil", pt[3], pt[4], pt[5] }
+		s.points[i] = { pt[1], pt[2] and (pt[2].name or "<unnamed>") or "nil", pt[3], pt[4], pt[5] }
 	end
 	return s
 end
 
+STUB.watched = {
+	cluster    = function() return MinimapCluster end,
+	minimap    = function() return Minimap end,
+	header     = function() return ClusterHeader end,
+	addonBtn   = function() return AddonButton end,
+	strayBtn   = function() return StrayButton end,
+	gatherPin  = function() return GatherPin end,
+	clampedPin = function() return ClampedPin end,
+	unnamed    = function() return UnnamedChild end,
+	calendar   = function() return CalendarButton end,
+}
+
 function STUB.Snapshot()
-	return {
-		cluster = snapFrame(MinimapCluster),
-		minimap = snapFrame(Minimap),
-		mouse = {
-			cluster  = MinimapCluster.mouse,
-			minimap  = Minimap.mouse,
-			wheel    = Minimap.wheel,
-			header   = ClusterHeader.mouse,
-			addonBtn = AddonButton.mouse,
-			pin      = GatherPin.mouse,
-		},
-		shown = {
-			addonBtn = AddonButton.shown,
-			pin      = GatherPin.shown,
-			calendar = CalendarButton.shown,
-			header   = ClusterHeader.shown,
-		},
-	}
+	local out = {}
+	for key, get in pairs(STUB.watched) do
+		out[key] = snapFrame(get())
+	end
+	return out
 end
 
 function STUB.Diff(a, b)
@@ -237,23 +285,26 @@ function STUB.Diff(a, b)
 	local function cmp(label, x, y)
 		if x ~= y then table.insert(out, label .. ": " .. tostring(x) .. " -> " .. tostring(y)) end
 	end
-	local function cmpFrame(label, fa, fb)
-		cmp(label .. ".scale", fa.scale, fb.scale)
-		cmp(label .. ".alpha", fa.alpha, fb.alpha)
-		cmp(label .. ".clamped", fa.clamped, fb.clamped)
-		cmp(label .. ".numPoints", #fa.points, #fb.points)
+	for key in pairs(STUB.watched) do
+		local fa, fb = a[key], b[key]
+		for _, field in ipairs({ "scale", "alpha", "clamped", "ignoreScale", "ignoreAlpha", "mouse", "wheel", "shown" }) do
+			cmp(key .. "." .. field, fa[field], fb[field])
+		end
+		cmp(key .. ".numPoints", #fa.points, #fb.points)
 		for i = 1, math.max(#fa.points, #fb.points) do
 			local pa, pb = fa.points[i], fb.points[i]
 			if pa and pb then
 				for j = 1, 5 do
-					cmp(label .. ".point" .. i .. "[" .. j .. "]", pa[j], pb[j])
+					cmp(key .. ".point" .. i .. "[" .. j .. "]", pa[j], pb[j])
 				end
 			end
 		end
 	end
-	cmpFrame("cluster", a.cluster, b.cluster)
-	cmpFrame("minimap", a.minimap, b.minimap)
-	for k, v in pairs(a.mouse) do cmp("mouse." .. k, v, b.mouse[k]) end
-	for k, v in pairs(a.shown) do cmp("shown." .. k, v, b.shown[k]) end
 	return out
+end
+
+-- Where is a frame's first anchor pointing right now?
+function STUB.AnchorName(frame)
+	local _, rel = frame:GetPoint(1)
+	return rel and (rel.name or "<unnamed>") or "nil"
 end
