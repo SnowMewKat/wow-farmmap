@@ -50,6 +50,28 @@ legal advice, just the reason not to be surprised.
 
 The repo is public, so that source link resolves.
 
+## Next session, pick up here
+
+Everything is shipped and public except the gallery. Parked 2026-09-04.
+
+1. **In game, run `/console screenshotQuality 10` once.** The default is 3 of
+   10, which is an aggressive JPEG, and the blips are small bright icons on a
+   dark background, the worst case for JPEG artifacts. This cannot be fixed
+   after the fact.
+2. **Take the shots with Print Screen**, not a snipping tool and not through
+   Telegram. WoW writes them to `_retail_/Screenshots/` at full resolution and
+   Claude can read that folder directly, so there is no need to send them.
+3. **Find somewhere with more nodes on screen.** Two blips shows the idea, five
+   or six shows why anyone would install it. Worth flying a known-rich herb or
+   ore route rather than wherever you happen to be.
+4. **Also grab a before and after pair** from the same spot: normal minimap,
+   then the node view.
+5. Then say they exist. Claude crops out the chat, captions them, adds the hero
+   shot to the top of the README and commits them.
+
+After that the only thing left is the CurseForge listing itself, which is
+account work on their site, not code.
+
 ## Screenshots for the gallery
 
 These have to come from Snow, because the addon only runs on her client.
