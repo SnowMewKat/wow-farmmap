@@ -102,6 +102,12 @@ def main():
             z.write(os.path.join(ADDON, rel), "FarmMap/" + rel.replace(os.sep, "/"))
         z.writestr("FarmMap/README.txt",
                    README % ("Built for interface %s." % interface()))
+        # The licence lives at the repo root, but it has to travel inside the
+        # addon folder or it is not in what anyone actually downloads.
+        licence = os.path.join(ROOT, "LICENSE")
+        if not os.path.exists(licence):
+            raise SystemExit("no LICENSE at the repo root")
+        z.write(licence, "FarmMap/LICENSE.txt")
 
     with zipfile.ZipFile(out) as z:
         names = z.namelist()

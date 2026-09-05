@@ -208,6 +208,12 @@ folder, which is what AddOns expects. The file list is explicit rather than
 globbed, so nothing stray can ride along, and the script re-opens the zip
 afterwards to check the layout.
 
+## License
+
+MIT, see [LICENSE](LICENSE). It is declared in the TOC as `## X-License: MIT`,
+which is where CurseForge reads it from, and a copy ships inside the zip as
+`FarmMap/LICENSE.txt` so it travels with what people actually download.
+
 ## Known limits
 
 - A gathering pin created *while* the overlay is already up keeps its mouse

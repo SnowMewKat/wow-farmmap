@@ -6,6 +6,7 @@
 ## SavedVariables: FarmMapDB
 ## IconTexture: Interface\AddOns\FarmMap\Media\farmmap-icon
 ## X-Category: Map & Minimap
+## X-License: MIT
 ## X-Website: https://github.com/SnowMewKat/wow-farmmap
 
 FarmMap.lua
