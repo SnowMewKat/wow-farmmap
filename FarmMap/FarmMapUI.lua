@@ -16,19 +16,8 @@ local atan2 = math.atan2 or math.atan
 -- Minimap button
 --------------------------------------------------------------------------------
 
--- While the overlay is up our button has been docked into the corner along
--- with every other minimap button, so it must orbit the dock, not the map that
--- is now filling the screen.
-local function RingAnchor()
-	if ns.dock and ns.IsActive and ns.IsActive() and not FarmMapDB.hideButtons then
-		return ns.dock
-	end
-	return Minimap
-end
-
 local function PositionButton()
 	if not button or not Minimap then return end
-	local anchor = RingAnchor()
 	local angle = math.rad(FarmMapDB.button.angle or 200)
 	local radius = (Minimap:GetWidth() / 2) + 8
 	-- SetPoint offsets are in the button's own scale space, so divide the
@@ -36,7 +25,7 @@ local function PositionButton()
 	local s = button:GetScale()
 	if not s or s <= 0 then s = 1 end
 	button:ClearAllPoints()
-	button:SetPoint("CENTER", anchor, "CENTER",
+	button:SetPoint("CENTER", Minimap, "CENTER",
 		(math.cos(angle) * radius) / s, (math.sin(angle) * radius) / s)
 end
 
@@ -87,10 +76,9 @@ local function BuildButton()
 	button:SetScript("OnDragStart", function(self)
 		self.dragging = true
 		self:SetScript("OnUpdate", function()
-			local anchor = RingAnchor()
-			local mx, my = anchor:GetCenter()
+			local mx, my = Minimap:GetCenter()
 			local px, py = GetCursorPosition()
-			local scale = anchor:GetEffectiveScale()
+			local scale = Minimap:GetEffectiveScale()
 			if not mx or not scale or scale <= 0 then return end
 			px, py = px / scale, py / scale
 			FarmMapDB.button.angle = math.deg(atan2(py - my, px - mx))
@@ -267,12 +255,12 @@ function ns.ApplyHudScale()
 	if panel then panel:SetScale(s) end
 end
 
--- Keep the button out of the way while the overlay is up, so it never
--- intercepts a click in the middle of the screen.
+-- Our button is a minimap button like any other, so it goes away with the rest
+-- of them while the overlay is up and comes back on dismount.
 function ns.OnOverlayChanged(shown)
 	if not button then return end
 	if shown then
-		if FarmMapDB.hideButtons then button:Hide() end
+		button:Hide()
 	elseif FarmMapDB.button.shown ~= false then
 		button:Show()
 	end

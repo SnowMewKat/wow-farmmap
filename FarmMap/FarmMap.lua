@@ -1,6 +1,8 @@
 -- FarmMap: core
--- Enlarged, centred, semi-transparent minimap while mounted or in Druid
--- Travel / Flight Form, restored exactly when you dismount.
+-- While you are mounted or in Druid Travel / Flight Form, the minimap's
+-- gathering nodes are moved to the centre of the screen, large and with the
+-- terrain faded out, so they are the only thing you have to look at. Every
+-- change is undone the moment you dismount.
 --
 -- Why the overlay IS the real minimap, and not a copy:
 -- the minimap's terrain and its blips are drawn by the game engine straight
@@ -10,12 +12,9 @@
 -- of its children come along.
 --
 -- Two modes:
---   "map"     move and scale Minimap alone. The minimap buttons are children
---             of Minimap, so they would be flung out to 4.5x the ring radius
---             and end up scattered across the screen. Instead they are docked:
---             detached from the map's scale and re-anchored to a stand-in
---             frame sitting exactly where the minimap used to be, so they keep
---             their home in the corner and stay clickable. Default.
+--   "map"     move and scale Minimap alone, and hide the minimap buttons while
+--             flying. The zone header, clock and tracking button never move,
+--             because they belong to the cluster rather than to the map. Default.
 --   "cluster" move and scale the whole MinimapCluster, furniture and all.
 --
 -- In both modes we SCALE and never resize. Pin addons such as GatherMate2 and
@@ -27,26 +26,26 @@ local ADDON_NAME, ns = ...
 
 local DB_VERSION = 4
 
--- Opacity that is known to work, from Snow's own screenshots: low enough that
--- the terrain is gone, high enough that the gathering blips still read. Zero
--- does NOT work, because it takes the blips with it and leaves only the
--- compass ring, which is the whole reason this constant exists.
+-- Opacity that is known to work, from real use: low enough that the terrain is
+-- gone, high enough that the gathering blips still read. Zero does NOT work,
+-- because it takes the blips with it and leaves only the compass ring, which
+-- is the whole reason this constant exists.
 local NODES_ONLY_ALPHA = 0.1
 local MIN_ALPHA = 0.05
 
-local RING_TEXTURE = [[Interface\AddOns\FarmMap\Media\farmmap-ring]]
-
 local DEFAULTS = {
-	enabled     = true,
-	size        = 900,     -- on-screen width of the map circle, in UI units
-	alpha       = NODES_ONLY_ALPHA,  -- nodes only out of the box
-	mode        = "map",   -- "map" or "cluster"
-	hideButtons = true,    -- true: hide buttons while flying. false: dock them
-	ring        = false,   -- socket ring behind docked buttons, off by default
-	hideMapArt  = true,    -- hide the compass and border rings while flying
-	hudScale    = 1.0,     -- scale of FarmMap's own UI (button and panel)
-	button      = { angle = 200, shown = true },
+	enabled    = true,
+	size       = 900,               -- width of the map circle on screen, in UI units
+	alpha      = NODES_ONLY_ALPHA,  -- nodes only out of the box
+	mode       = "map",             -- "map" or "cluster"
+	hideMapArt = true,              -- hide the compass and border rings while flying
+	hudScale   = 1.0,               -- scale of FarmMap's own button and panel
+	button     = { angle = 200, shown = true },
 }
+
+-- GetShapeshiftFormID() values that count as mounted for our purposes.
+-- Verified against current retail: 3 Travel, 4 Aquatic, 27 Swift Flight, 29 Flight.
+local TRAVEL_FORMS = { [3] = true, [4] = true, [27] = true, [29] = true }
 
 -- Minimap decoration that is neither map nor node. At a low opacity this is
 -- the only thing left on screen, drawn as a big bright circle around the
@@ -59,10 +58,6 @@ local MAP_ART = {
 	"MinimapZoomIn",
 	"MinimapZoomOut",
 }
-
--- GetShapeshiftFormID() values that count as mounted for our purposes.
--- Verified against current retail: 3 Travel, 4 Aquatic, 27 Swift Flight, 29 Flight.
-local TRAVEL_FORMS = { [3] = true, [4] = true, [27] = true, [29] = true }
 
 -- Known furniture. The geometric test below catches most addon buttons on its
 -- own; these are the ones worth naming because they are always furniture.
@@ -81,7 +76,7 @@ local FURNITURE_NAMES = {
 
 -- Names that mean "this is map content, never touch it". Checked before the
 -- geometric test, because an edge-clamped gathering pin can sit right on the
--- ring and must still travel with the map.
+-- ring and must still be treated as a node.
 local PIN_WORDS = { "Pin", "Node", "Blip", "GatherMate", "HandyNotes", "POI", "Poi", "Arrow" }
 
 local active     = false
@@ -90,10 +85,8 @@ local saved      = nil
 local mouseSaved = nil
 local hiddenBits = nil
 local hiddenArt  = nil
-local dockedBits = nil
 local wantScale  = nil
 local wantTarget = nil
-local dock       = nil
 
 local function Print(msg)
 	print("|cff33ff99FarmMap|r: " .. msg)
@@ -121,6 +114,9 @@ end
 --------------------------------------------------------------------------------
 -- Telling minimap buttons apart from gathering pins
 --------------------------------------------------------------------------------
+-- Buttons are children of Minimap anchored out on the ring, so scaling the map
+-- would fling them across the screen. They get hidden for the duration instead.
+-- Pins must survive that, so this has to be right.
 
 local function LooksLikePin(name)
 	for _, word in ipairs(PIN_WORDS) do
@@ -129,8 +125,8 @@ local function LooksLikePin(name)
 	return false
 end
 
--- Minimap buttons live on the ring; map content lives inside it. Comparing in
--- screen pixels keeps this honest whatever the scales involved are.
+-- Buttons live on the ring; map content lives inside it. Comparing in screen
+-- pixels keeps this honest whatever the scales involved are.
 local function SitsOutsideTheRing(child)
 	local cx, cy = child:GetCenter()
 	local mx, my = Minimap:GetCenter()
@@ -149,98 +145,13 @@ local function IsFurniture(child)
 	if not name then return false end               -- unnamed: assume map content
 	if FURNITURE_NAMES[name] then return true end
 	if string.find(name, "^LibDBIcon") then return true end
-	if LooksLikePin(name) then return false end     -- never dock a pin
+	if LooksLikePin(name) then return false end     -- never hide a pin
 	return SitsOutsideTheRing(child)
 end
 ns.IsFurniture = IsFurniture
 
 --------------------------------------------------------------------------------
--- The dock: a stand-in for the minimap, so the corner keeps its furniture
---------------------------------------------------------------------------------
-
-local function EnsureDock()
-	if dock then return dock end
-
-	dock = CreateFrame("Frame", "FarmMapDock", MinimapCluster)
-	dock:SetFrameStrata(MinimapCluster:GetFrameStrata() or "LOW")
-	dock:Hide()
-
-	local ring = dock:CreateTexture(nil, "BACKGROUND")
-	ring:SetAllPoints()
-	ring:SetTexture(RING_TEXTURE)
-	dock.ring = ring
-
-	ns.dock = dock
-	return dock
-end
-
--- Put the dock exactly where the minimap is right now. Called before the map
--- moves, so "right now" still means the corner.
-local function PositionDock()
-	EnsureDock()
-
-	dock:SetSize(Minimap:GetWidth(), Minimap:GetHeight())
-	dock:SetScale(Minimap:GetScale())
-	dock:ClearAllPoints()
-
-	local n = Minimap:GetNumPoints()
-	if n > 0 then
-		for i = 1, n do
-			local p, rel, rp, x, y = Minimap:GetPoint(i)
-			dock:SetPoint(p, rel or Minimap:GetParent(), rp, x, y)
-		end
-	else
-		dock:SetPoint("CENTER", MinimapCluster, "CENTER", 0, 0)
-	end
-
-	if FarmMapDB.ring then dock.ring:Show() else dock.ring:Hide() end
-end
-
-local function DockFurniture(store)
-	for _, child in ipairs({ Minimap:GetChildren() }) do
-		if IsFurniture(child) and child:GetNumPoints() > 0 then
-			local points = {}
-			for i = 1, child:GetNumPoints() do
-				points[i] = { child:GetPoint(i) }
-			end
-
-			store[#store + 1] = {
-				frame = child,
-				points = points,
-				ignoredScale = (child.IsIgnoringParentScale and child:IsIgnoringParentScale()) or false,
-				ignoredAlpha = (child.IsIgnoringParentAlpha and child:IsIgnoringParentAlpha()) or false,
-			}
-
-			-- Detach from the map's scale and opacity, then re-anchor onto the
-			-- dock. The frame stays a child of Minimap, so nothing an addon
-			-- knows about its own button changes.
-			if child.SetIgnoreParentScale then child:SetIgnoreParentScale(true) end
-			if child.SetIgnoreParentAlpha then child:SetIgnoreParentAlpha(true) end
-
-			child:ClearAllPoints()
-			for _, p in ipairs(points) do
-				local rel = p[2]
-				if rel == Minimap or rel == nil then rel = dock end
-				child:SetPoint(p[1], rel, p[3], p[4], p[5])
-			end
-		end
-	end
-end
-
-local function UndockFurniture(store)
-	for i = #store, 1, -1 do
-		local e = store[i]
-		if e.frame.SetIgnoreParentScale then e.frame:SetIgnoreParentScale(e.ignoredScale) end
-		if e.frame.SetIgnoreParentAlpha then e.frame:SetIgnoreParentAlpha(e.ignoredAlpha) end
-		e.frame:ClearAllPoints()
-		for _, p in ipairs(e.points) do
-			e.frame:SetPoint(p[1], p[2], p[3], p[4], p[5])
-		end
-	end
-end
-
---------------------------------------------------------------------------------
--- Hiding furniture outright, for people who would rather it went away
+-- Getting the furniture out of the way
 --------------------------------------------------------------------------------
 
 local function HideFurniture(store)
@@ -249,12 +160,6 @@ local function HideFurniture(store)
 			store[#store + 1] = child
 			child:Hide()
 		end
-	end
-end
-
-local function ShowFurniture(store)
-	for i = #store, 1, -1 do
-		store[i]:Show()
 	end
 end
 
@@ -268,15 +173,20 @@ local function HideMapArt(store)
 	end
 end
 
+local function ShowAgain(store)
+	for i = #store, 1, -1 do
+		store[i]:Show()
+	end
+end
+
 --------------------------------------------------------------------------------
 -- Mouse pass-through
 --------------------------------------------------------------------------------
--- The centred map must not eat clicks, drags or scroll. Docked furniture is
--- skipped: it is back in the corner, where being clickable is the point.
+-- The centred map must not eat clicks, drags or scroll, or it would sit
+-- between you and your own camera.
 
-local function DisableMouse(frame, store, depth, skip)
+local function DisableMouse(frame, store, depth)
 	if depth > 6 then return end
-	if skip and skip[frame] then return end
 
 	if frame.IsMouseEnabled and frame:IsMouseEnabled() then
 		store[#store + 1] = { frame, "mouse" }
@@ -288,7 +198,7 @@ local function DisableMouse(frame, store, depth, skip)
 	end
 
 	for _, child in ipairs({ frame:GetChildren() }) do
-		DisableMouse(child, store, depth + 1, skip)
+		DisableMouse(child, store, depth + 1)
 	end
 end
 
@@ -382,29 +292,17 @@ local function ApplyOverlay()
 		points  = points,
 	}
 
-	hiddenBits, dockedBits, hiddenArt = {}, {}, {}
-	local skip = nil
+	hiddenBits, hiddenArt = {}, {}
 
-	if target == Minimap and FarmMapDB.hideMapArt then
-		HideMapArt(hiddenArt)
-	end
-
-	-- Everything below has to happen while the minimap is still at its normal
-	-- size and place, because that is what the classification measures.
+	-- Both passes have to happen while the minimap is still at its normal size
+	-- and place, because that is what the classification measures.
 	if target == Minimap then
-		if FarmMapDB.hideButtons then
-			HideFurniture(hiddenBits)
-		else
-			PositionDock()
-			DockFurniture(dockedBits)
-			dock:Show()
-			skip = {}
-			for _, e in ipairs(dockedBits) do skip[e.frame] = true end
-		end
+		HideFurniture(hiddenBits)
+		if FarmMapDB.hideMapArt then HideMapArt(hiddenArt) end
 	end
 
 	mouseSaved = {}
-	DisableMouse(target, mouseSaved, 0, skip)
+	DisableMouse(target, mouseSaved, 0)
 
 	ApplyLayout()
 	active = true
@@ -433,15 +331,11 @@ local function RemoveOverlay()
 		end
 	end
 
-	-- Undock after the map is home, so the buttons land back on a minimap that
-	-- is already the right size and place.
-	if dockedBits then UndockFurniture(dockedBits) end
-	if dock then dock:Hide() end
-	if hiddenBits then ShowFurniture(hiddenBits) end
-	if hiddenArt then ShowFurniture(hiddenArt) end
+	if hiddenBits then ShowAgain(hiddenBits) end
+	if hiddenArt then ShowAgain(hiddenArt) end
 	if mouseSaved then RestoreMouse(mouseSaved) end
 
-	saved, mouseSaved, hiddenBits, hiddenArt, dockedBits = nil, nil, nil, nil, nil
+	saved, mouseSaved, hiddenBits, hiddenArt = nil, nil, nil, nil
 	wantScale, wantTarget, active = nil, nil, false
 	if ns.OnOverlayChanged then ns.OnOverlayChanged(false) end
 end
@@ -470,9 +364,8 @@ function ns.SetEnabled(on)
 	Update()
 end
 
--- Anything that changes WHICH frame we move, or what we do with the furniture,
--- has to put the current overlay away first or we would restore the wrong
--- thing later.
+-- Anything that changes WHICH frame we move, or what we hide, has to put the
+-- current overlay away first or we would restore the wrong thing later.
 local function Restyle(apply)
 	local wasActive = active
 	if wasActive then RemoveOverlay() end
@@ -485,15 +378,8 @@ function ns.SetMode(mode)
 	Restyle(function() FarmMapDB.mode = mode end)
 end
 
-function ns.SetHideButtons(on)
-	Restyle(function() FarmMapDB.hideButtons = on and true or false end)
-end
-
-function ns.SetRing(on)
-	FarmMapDB.ring = on and true or false
-	if dock and dock.ring then
-		if FarmMapDB.ring then dock.ring:Show() else dock.ring:Hide() end
-	end
+function ns.SetHideMapArt(on)
+	Restyle(function() FarmMapDB.hideMapArt = on and true or false end)
 end
 
 function ns.SetSize(n)
@@ -510,9 +396,9 @@ function ns.SetAlpha(n)
 	if active then ApplyLayout() end
 end
 
--- Nodes only. Snow found this by hand and it is the best the addon looks: the
--- terrain fades out and the gathering blips are left hanging in space, front
--- and centre, with nothing scrolling underneath to cause motion sickness.
+-- Nodes only, which is the point of the whole addon: the terrain fades out and
+-- the gathering blips are left hanging in space, front and centre, with
+-- nothing scrolling underneath to cause motion sickness.
 --
 -- It is a low opacity, not zero. Zero fades the blips out too and leaves only
 -- the compass ring, a big bright circle around the character. Found the hard
@@ -529,10 +415,6 @@ function ns.SetNodesOnly(on)
 		if back <= 0.15 then back = 0.6 end
 		ns.SetAlpha(back)
 	end
-end
-
-function ns.SetHideMapArt(on)
-	Restyle(function() FarmMapDB.hideMapArt = on and true or false end)
 end
 
 function ns.SetHudScale(n)
@@ -576,16 +458,13 @@ f:SetScript("OnEvent", function(_, event, arg1)
 			FarmMapDB.prevAlpha = (FarmMapDB.alpha > 0.15) and FarmMapDB.alpha or 0.6
 		end
 
+		-- Migrations may repair data that is broken. They may NOT change a
+		-- preference somebody set: doing that once already undid a setup the
+		-- user liked, and they had no way to know why.
 		if not fresh then
-			-- v1 saved a size before "2x bigger" was asked for.
+			-- v1 saved a size before "twice as big" was asked for.
 			if hadVersion == nil then
 				FarmMapDB.size = math.min(FarmMapDB.size * 2, 1600)
-			end
-			-- v3 switched existing profiles from hiding the minimap buttons to
-			-- docking them. Nobody asked for that and Snow preferred them
-			-- hidden, so put it back. Lesson kept: do not migrate a preference.
-			if hadVersion == 3 then
-				FarmMapDB.hideButtons = true
 			end
 			-- Opacity 0 hides the gathering blips along with the terrain.
 			if FarmMapDB.alpha < MIN_ALPHA then
@@ -601,7 +480,6 @@ f:SetScript("OnEvent", function(_, event, arg1)
 				RemoveOverlay()
 			end)
 		end
-		EnsureDock()
 		if ns.BuildUI then ns.BuildUI() end
 		-- Safety net for any mount or form change that does not fire an event.
 		C_Timer.NewTicker(0.25, function()
@@ -633,12 +511,19 @@ SlashCmdList["FARMMAP"] = function(msg)
 		ns.SetEnabled(not FarmMapDB.enabled)
 		Print(FarmMapDB.enabled and "enabled." or "disabled.")
 
+	elseif cmd == "config" or cmd == "options" then
+		if ns.ToggleOptions then ns.ToggleOptions() else Print("options panel unavailable.") end
+
+	elseif cmd == "nodes" then
+		ns.SetNodesOnly(not ns.IsNodesOnly())
+		Print(ns.IsNodesOnly()
+			and "nodes only. The map fades out, the gathering blips do not."
+			or ("map back at opacity " .. FarmMapDB.alpha .. "."))
+		if ns.RefreshOptions then ns.RefreshOptions() end
+
 	elseif cmd == "test" then
 		ns.SetTest(not testMode)
 		Print("test mode " .. (testMode and "ON, overlay forced visible." or "off."))
-
-	elseif cmd == "config" or cmd == "options" then
-		if ns.ToggleOptions then ns.ToggleOptions() else Print("options panel unavailable.") end
 
 	elseif cmd == "mode" then
 		if rest == "map" or rest == "cluster" then
@@ -648,19 +533,10 @@ SlashCmdList["FARMMAP"] = function(msg)
 			Print("usage: /farmmap mode map|cluster (current: " .. FarmMapDB.mode .. ")")
 		end
 
-	elseif cmd == "buttons" then
-		ns.SetHideButtons(not FarmMapDB.hideButtons)
-		Print("minimap buttons while farming: " ..
-			(FarmMapDB.hideButtons and "hidden." or "docked in the corner."))
-
 	elseif cmd == "art" then
 		ns.SetHideMapArt(not FarmMapDB.hideMapArt)
 		Print("compass and border rings while farming: " ..
 			(FarmMapDB.hideMapArt and "hidden." or "shown."))
-
-	elseif cmd == "ring" then
-		ns.SetRing(not FarmMapDB.ring)
-		Print("corner ring " .. (FarmMapDB.ring and "shown." or "hidden."))
 
 	elseif cmd == "size" then
 		local n = tonumber(rest)
@@ -680,13 +556,6 @@ SlashCmdList["FARMMAP"] = function(msg)
 			Print("usage: /farmmap alpha " .. MIN_ALPHA .. "-1.0 (current: " .. FarmMapDB.alpha .. ")")
 		end
 
-	elseif cmd == "nodes" then
-		ns.SetNodesOnly(not ns.IsNodesOnly())
-		Print(ns.IsNodesOnly()
-			and "nodes only. The map fades out, the gathering blips do not."
-			or ("map back at opacity " .. FarmMapDB.alpha .. "."))
-		if ns.RefreshOptions then ns.RefreshOptions() end
-
 	elseif cmd == "hud" then
 		local n = tonumber(rest)
 		if n and n >= 0.5 and n <= 4 then
@@ -699,7 +568,7 @@ SlashCmdList["FARMMAP"] = function(msg)
 	elseif cmd == "dump" then
 		-- Diagnostic: shows how each child of the minimap is being classified.
 		local unnamed, listed = 0, 0
-		Print("Minimap children (furniture stays in the corner):")
+		Print("Minimap children (furniture is hidden while flying):")
 		for _, child in ipairs({ Minimap:GetChildren() }) do
 			local name = child.GetName and child:GetName()
 			if not name then
@@ -733,13 +602,13 @@ SlashCmdList["FARMMAP"] = function(msg)
 
 	elseif cmd == "status" then
 		Print(string.format(
-			"enabled=%s test=%s overlay=%s mode=%s buttons=%s ring=%s size=%s alpha=%s hud=%s mounted=%s form=%s",
+			"enabled=%s test=%s overlay=%s mode=%s art=%s size=%s alpha=%s hud=%s mounted=%s form=%s",
 			tostring(FarmMapDB.enabled), tostring(testMode), tostring(active),
-			tostring(FarmMapDB.mode), FarmMapDB.hideButtons and "hidden" or "docked",
-			tostring(FarmMapDB.ring), tostring(FarmMapDB.size), tostring(FarmMapDB.alpha),
+			tostring(FarmMapDB.mode), FarmMapDB.hideMapArt and "hidden" or "shown",
+			tostring(FarmMapDB.size), tostring(FarmMapDB.alpha),
 			tostring(FarmMapDB.hudScale), tostring(IsMounted()), tostring(GetShapeshiftFormID())))
 
 	else
-		Print("commands: /farmmap (toggle), config, test, nodes, mode map|cluster, buttons, ring, art, size N, alpha N, hud N, dump, reset, status")
+		Print("commands: /farmmap (toggle), config, nodes, test, mode map|cluster, art, size N, alpha N, hud N, dump, reset, status")
 	end
 end

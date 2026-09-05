@@ -1,10 +1,12 @@
 ## Interface: 120100
 ## Title: FarmMap
-## Notes: Enlarged, centred, semi-transparent minimap while mounted or in Travel/Flight Form.
+## Notes: Gathering nodes front and centre while you fly. Fades the map, keeps the blips, puts everything back when you dismount.
 ## Author: Snow
-## Version: 4.1.0
+## Version: 5.0.0
 ## SavedVariables: FarmMapDB
 ## IconTexture: Interface\AddOns\FarmMap\Media\farmmap-icon
+## X-Category: Map & Minimap
+## X-Website: https://github.com/SnowMewKat/wow-farmmap
 
 FarmMap.lua
 FarmMapUI.lua

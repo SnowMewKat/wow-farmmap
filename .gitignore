@@ -1,3 +1,4 @@
 .venv/
 __pycache__/
-art/icon-preview.png
+art/*-preview.png
+dist/
