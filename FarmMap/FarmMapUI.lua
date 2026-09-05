@@ -171,7 +171,7 @@ local function BuildPanel()
 	panel = CreateFrame("Frame", "FarmMapOptionsPanel", UIParent, "BackdropTemplate")
 	ns.panel = panel
 
-	panel:SetSize(300, 342)
+	panel:SetSize(300, 370)
 	panel:SetPoint("CENTER")
 	panel:SetFrameStrata("DIALOG")
 	panel:SetMovable(true)
@@ -224,6 +224,11 @@ local function BuildPanel()
 		function(v) ns.SetHideButtons(v) end)
 
 	y = y - 28
+	MakeCheckbox(panel, "Hide compass and border rings", 20, y,
+		function() return FarmMapDB.hideMapArt end,
+		function(v) ns.SetHideMapArt(v) end)
+
+	y = y - 28
 	MakeCheckbox(panel, "Show the corner ring", 20, y,
 		function() return FarmMapDB.ring end,
 		function(v) ns.SetRing(v) end)
@@ -234,7 +239,7 @@ local function BuildPanel()
 		function(n) ns.SetSize(n) end, "%d")
 
 	y = y - 30
-	MakeStepper(panel, "Map opacity", 24, y, 0.05, 0, 1.0,
+	MakeStepper(panel, "Map opacity", 24, y, 0.05, 0.05, 1.0,
 		function() return FarmMapDB.alpha end,
 		function(n) ns.SetAlpha(n) end, "%.2f")
 

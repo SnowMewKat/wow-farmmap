@@ -78,6 +78,7 @@ function Frame:GetPoint(i)
 	return pt[1], pt[2], pt[3], pt[4], pt[5]
 end
 function Frame:GetChildren() return table.unpack(self.children) end
+function Frame:GetRegions() return table.unpack(self.regions or {}) end
 function Frame:GetName() return self.name end
 function Frame:GetParent() return self.parent end
 function Frame:EnableMouse(v) self.mouse = v end
@@ -198,6 +199,13 @@ CalendarButton.cx, CalendarButton.cy = 570, 470
 CalendarButton.mouse = true
 CalendarButton:SetPoint("CENTER", Minimap, "CENTER", 70, 70)
 
+-- The compass ring: decoration that is neither map nor node, and the thing
+-- that was left alone on screen once the map faded out.
+MinimapCompassTexture = NewFrame("MinimapCompassTexture", Minimap)
+MinimapCompassTexture.cx, MinimapCompassTexture.cy = 500, 400
+MinimapBorder = NewFrame("MinimapBorder", Minimap)
+MinimapBorder.cx, MinimapBorder.cy = 500, 400
+
 EditModeManagerFrame = NewFrame("EditModeManagerFrame", UIParent)
 EditModeManagerFrame.shown = false
 
@@ -270,6 +278,8 @@ STUB.watched = {
 	clampedPin = function() return ClampedPin end,
 	unnamed    = function() return UnnamedChild end,
 	calendar   = function() return CalendarButton end,
+	compass    = function() return MinimapCompassTexture end,
+	border     = function() return MinimapBorder end,
 }
 
 function STUB.Snapshot()

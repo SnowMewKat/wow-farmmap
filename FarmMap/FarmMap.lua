@@ -25,7 +25,14 @@
 
 local ADDON_NAME, ns = ...
 
-local DB_VERSION = 3
+local DB_VERSION = 4
+
+-- Opacity that is known to work, from Snow's own screenshots: low enough that
+-- the terrain is gone, high enough that the gathering blips still read. Zero
+-- does NOT work, because it takes the blips with it and leaves only the
+-- compass ring, which is the whole reason this constant exists.
+local NODES_ONLY_ALPHA = 0.1
+local MIN_ALPHA = 0.05
 
 local RING_TEXTURE = [[Interface\AddOns\FarmMap\Media\farmmap-ring]]
 
@@ -34,11 +41,23 @@ local DEFAULTS = {
 	size        = 900,     -- on-screen width of the map circle, in UI units
 	alpha       = 0.6,
 	mode        = "map",   -- "map" or "cluster"
-	hideButtons = false,   -- false: dock buttons in the corner. true: hide them
+	hideButtons = true,    -- true: hide buttons while flying. false: dock them
 	ring        = true,    -- draw the socket ring the docked buttons sit on
+	hideMapArt  = true,    -- hide the compass and border rings while flying
 	hudScale    = 1.0,     -- scale of FarmMap's own UI (button and panel)
-	prevAlpha   = 0.6,     -- what to go back to when "nodes only" is turned off
 	button      = { angle = 200, shown = true },
+}
+
+-- Minimap decoration that is neither map nor node. At a low opacity this is
+-- the only thing left on screen, drawn as a big bright circle around the
+-- character, which is exactly what we are trying to get rid of.
+local MAP_ART = {
+	"MinimapCompassTexture",
+	"MinimapBorder",
+	"MinimapBorderTop",
+	"MinimapNorthTag",
+	"MinimapZoomIn",
+	"MinimapZoomOut",
 }
 
 -- GetShapeshiftFormID() values that count as mounted for our purposes.
@@ -70,6 +89,7 @@ local testMode   = false
 local saved      = nil
 local mouseSaved = nil
 local hiddenBits = nil
+local hiddenArt  = nil
 local dockedBits = nil
 local wantScale  = nil
 local wantTarget = nil
@@ -238,6 +258,16 @@ local function ShowFurniture(store)
 	end
 end
 
+local function HideMapArt(store)
+	for _, name in ipairs(MAP_ART) do
+		local art = _G[name]
+		if art and art.IsShown and art:IsShown() and art.Hide then
+			store[#store + 1] = art
+			art:Hide()
+		end
+	end
+end
+
 --------------------------------------------------------------------------------
 -- Mouse pass-through
 --------------------------------------------------------------------------------
@@ -352,8 +382,12 @@ local function ApplyOverlay()
 		points  = points,
 	}
 
-	hiddenBits, dockedBits = {}, {}
+	hiddenBits, dockedBits, hiddenArt = {}, {}, {}
 	local skip = nil
+
+	if target == Minimap and FarmMapDB.hideMapArt then
+		HideMapArt(hiddenArt)
+	end
 
 	-- Everything below has to happen while the minimap is still at its normal
 	-- size and place, because that is what the classification measures.
@@ -404,9 +438,10 @@ local function RemoveOverlay()
 	if dockedBits then UndockFurniture(dockedBits) end
 	if dock then dock:Hide() end
 	if hiddenBits then ShowFurniture(hiddenBits) end
+	if hiddenArt then ShowFurniture(hiddenArt) end
 	if mouseSaved then RestoreMouse(mouseSaved) end
 
-	saved, mouseSaved, hiddenBits, dockedBits = nil, nil, nil, nil
+	saved, mouseSaved, hiddenBits, hiddenArt, dockedBits = nil, nil, nil, nil, nil
 	wantScale, wantTarget, active = nil, nil, false
 	if ns.OnOverlayChanged then ns.OnOverlayChanged(false) end
 end
@@ -467,28 +502,37 @@ function ns.SetSize(n)
 end
 
 function ns.SetAlpha(n)
+	if n < MIN_ALPHA then n = MIN_ALPHA end
 	FarmMapDB.alpha = n
-	if n > 0 then FarmMapDB.prevAlpha = n end
+	-- Only remember opacities above the nodes-only band, so toggling nodes-only
+	-- off takes you back to a map you can actually see.
+	if n > 0.15 then FarmMapDB.prevAlpha = n end
 	if active then ApplyLayout() end
 end
 
--- Nodes only. Snow found this by hand and it is the best the addon looks:
--- drop the map to nothing and the gathering blips are left hanging in space,
--- front and centre, with no scrolling terrain underneath to cause motion
--- sickness. The blips are drawn by the engine rather than being part of the
--- map texture, which is why they survive.
+-- Nodes only. Snow found this by hand and it is the best the addon looks: the
+-- terrain fades out and the gathering blips are left hanging in space, front
+-- and centre, with nothing scrolling underneath to cause motion sickness.
+--
+-- It is a low opacity, not zero. Zero fades the blips out too and leaves only
+-- the compass ring, a big bright circle around the character. Found the hard
+-- way, hence NODES_ONLY_ALPHA and the MIN_ALPHA floor.
 function ns.IsNodesOnly()
-	return (FarmMapDB.alpha or 0) <= 0.001
+	return (FarmMapDB.alpha or 1) <= 0.15
 end
 
 function ns.SetNodesOnly(on)
 	if on then
-		ns.SetAlpha(0)
+		ns.SetAlpha(NODES_ONLY_ALPHA)
 	else
 		local back = FarmMapDB.prevAlpha or 0.6
-		if back <= 0.001 then back = 0.6 end
+		if back <= 0.15 then back = 0.6 end
 		ns.SetAlpha(back)
 	end
+end
+
+function ns.SetHideMapArt(on)
+	Restyle(function() FarmMapDB.hideMapArt = on and true or false end)
 end
 
 function ns.SetHudScale(n)
@@ -526,15 +570,26 @@ f:SetScript("OnEvent", function(_, event, arg1)
 			if FarmMapDB.button[k] == nil then FarmMapDB.button[k] = v end
 		end
 
+		if FarmMapDB.prevAlpha == nil then
+			-- Seed from whatever they are actually using, not from the default,
+			-- or turning nodes-only off hands them an opacity they never chose.
+			FarmMapDB.prevAlpha = (FarmMapDB.alpha > 0.15) and FarmMapDB.alpha or 0.6
+		end
+
 		if not fresh then
 			-- v1 saved a size before "2x bigger" was asked for.
 			if hadVersion == nil then
 				FarmMapDB.size = math.min(FarmMapDB.size * 2, 1600)
 			end
-			-- v2 hid the minimap buttons. v3 gives them a home in the corner
-			-- instead, which is better, so move existing profiles onto it.
-			if (hadVersion or 0) < 3 then
-				FarmMapDB.hideButtons = false
+			-- v3 switched existing profiles from hiding the minimap buttons to
+			-- docking them. Nobody asked for that and Snow preferred them
+			-- hidden, so put it back. Lesson kept: do not migrate a preference.
+			if hadVersion == 3 then
+				FarmMapDB.hideButtons = true
+			end
+			-- Opacity 0 hides the gathering blips along with the terrain.
+			if FarmMapDB.alpha < MIN_ALPHA then
+				FarmMapDB.alpha = NODES_ONLY_ALPHA
 			end
 		end
 		FarmMapDB.dbVersion = DB_VERSION
@@ -598,6 +653,11 @@ SlashCmdList["FARMMAP"] = function(msg)
 		Print("minimap buttons while farming: " ..
 			(FarmMapDB.hideButtons and "hidden." or "docked in the corner."))
 
+	elseif cmd == "art" then
+		ns.SetHideMapArt(not FarmMapDB.hideMapArt)
+		Print("compass and border rings while farming: " ..
+			(FarmMapDB.hideMapArt and "hidden." or "shown."))
+
 	elseif cmd == "ring" then
 		ns.SetRing(not FarmMapDB.ring)
 		Print("corner ring " .. (FarmMapDB.ring and "shown." or "hidden."))
@@ -613,17 +673,17 @@ SlashCmdList["FARMMAP"] = function(msg)
 
 	elseif cmd == "alpha" then
 		local n = tonumber(rest)
-		if n and n >= 0 and n <= 1 then
+		if n and n >= MIN_ALPHA and n <= 1 then
 			ns.SetAlpha(n)
 			Print("map opacity set to " .. n .. ".")
 		else
-			Print("usage: /farmmap alpha 0-1.0, 0 is nodes only (current: " .. FarmMapDB.alpha .. ")")
+			Print("usage: /farmmap alpha " .. MIN_ALPHA .. "-1.0 (current: " .. FarmMapDB.alpha .. ")")
 		end
 
 	elseif cmd == "nodes" then
 		ns.SetNodesOnly(not ns.IsNodesOnly())
 		Print(ns.IsNodesOnly()
-			and "nodes only. The map is hidden, the gathering blips are not."
+			and "nodes only. The map fades out, the gathering blips do not."
 			or ("map back at opacity " .. FarmMapDB.alpha .. "."))
 		if ns.RefreshOptions then ns.RefreshOptions() end
 
@@ -651,6 +711,15 @@ SlashCmdList["FARMMAP"] = function(msg)
 			end
 		end
 		Print(string.format("  ...and %d unnamed children, treated as map content.", unnamed))
+		if Minimap.GetRegions then
+			Print("Minimap regions (art layers):")
+			for _, r in ipairs({ Minimap:GetRegions() }) do
+				local rname = r.GetName and r:GetName()
+				if rname then
+					Print(string.format("  %s | shown=%s", rname, tostring(r:IsShown())))
+				end
+			end
+		end
 		Print("MinimapCluster children (these never move in map mode):")
 		for _, child in ipairs({ MinimapCluster:GetChildren() }) do
 			local name = child.GetName and child:GetName()
@@ -671,6 +740,6 @@ SlashCmdList["FARMMAP"] = function(msg)
 			tostring(FarmMapDB.hudScale), tostring(IsMounted()), tostring(GetShapeshiftFormID())))
 
 	else
-		Print("commands: /farmmap (toggle), config, test, nodes, mode map|cluster, buttons, ring, size N, alpha N, hud N, dump, reset, status")
+		Print("commands: /farmmap (toggle), config, test, nodes, mode map|cluster, buttons, ring, art, size N, alpha N, hud N, dump, reset, status")
 	end
 end

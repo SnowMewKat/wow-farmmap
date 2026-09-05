@@ -30,7 +30,8 @@ check("default enabled", FarmMapDB.enabled == true)
 check("default size 900", FarmMapDB.size == 900, FarmMapDB.size)
 check("default alpha 0.6", FarmMapDB.alpha == 0.6, FarmMapDB.alpha)
 check("default mode map", FarmMapDB.mode == "map", FarmMapDB.mode)
-check("default docks buttons rather than hiding", FarmMapDB.hideButtons == false)
+check("default hides buttons while flying", FarmMapDB.hideButtons == true)
+check("default hides the compass art", FarmMapDB.hideMapArt == true)
 check("default ring on", FarmMapDB.ring == true)
 check("default hudScale 1", FarmMapDB.hudScale == 1.0, FarmMapDB.hudScale)
 
@@ -58,6 +59,7 @@ check("our own button is furniture", ns.IsFurniture(ns.button) == true)
 --------------------------------------------------------------------------------
 -- 3. Map mode: content goes to the centre, furniture stays in the corner
 --------------------------------------------------------------------------------
+ns.SetHideButtons(false)   -- docking is opt-in now, so ask for it explicitly
 STUB.mounted = true
 fire("PLAYER_MOUNT_DISPLAY_CHANGED")
 
@@ -104,11 +106,11 @@ fire("PLAYER_MOUNT_DISPLAY_CHANGED")
 restored(baseline, "dismount restores exactly")
 check("dock hidden again", ns.dock.shown == false)
 check("button back on the minimap", STUB.AnchorName(ns.button) == "Minimap", STUB.AnchorName(ns.button))
+ns.SetHideButtons(true)    -- back to the default
 
 --------------------------------------------------------------------------------
 -- 5. Hiding furniture instead of docking
 --------------------------------------------------------------------------------
-ns.SetHideButtons(true)
 STUB.mounted = true
 STUB.Tick()
 check("hide mode: addon button hidden", AddonButton.shown == false)
@@ -118,12 +120,12 @@ check("hide mode: clamped pin still visible", ClampedPin.shown == true)
 check("hide mode: dock not used", ns.dock.shown == false)
 STUB.mounted = false
 STUB.Tick()
-ns.SetHideButtons(false)
 restored(baseline, "hide mode restores exactly")
 
 --------------------------------------------------------------------------------
 -- 6. Ring toggle
 --------------------------------------------------------------------------------
+ns.SetHideButtons(false)
 STUB.mounted = true
 STUB.Tick()
 ns.SetRing(false)
@@ -132,6 +134,7 @@ ns.SetRing(true)
 check("ring can be turned back on", ns.dock.ring.shown == true)
 STUB.mounted = false
 STUB.Tick()
+ns.SetHideButtons(true)
 
 --------------------------------------------------------------------------------
 -- 7. Cluster mode
@@ -155,7 +158,7 @@ STUB.Tick()
 check("pre-switch: minimap is the target", Minimap.scale > 1.5)
 ns.SetMode("cluster")
 check("switch restores the minimap", Minimap.scale == 1, Minimap.scale)
-check("switch undocks the furniture", STUB.AnchorName(AddonButton) == "Minimap")
+check("switch releases the furniture", STUB.AnchorName(AddonButton) == "Minimap")
 check("switch moves the cluster", MinimapCluster.scale > 1.5, MinimapCluster.scale)
 ns.SetMode("map")
 check("switch back restores the cluster", MinimapCluster.scale == 1, MinimapCluster.scale)
@@ -227,6 +230,7 @@ check("drag changes the saved angle", FarmMapDB.button.angle ~= angleA, FarmMapD
 check("drag stops cleanly", ns.button.scripts.OnUpdate == nil)
 
 -- Dragging while docked must orbit the dock, not the centred map
+ns.SetHideButtons(false)
 STUB.mounted = true
 STUB.Tick()
 ns.button.scripts.OnDragStart(ns.button)
@@ -237,6 +241,7 @@ check("drag while docked keeps the button on the dock",
 	STUB.AnchorName(ns.button) == "FarmMapDock", STUB.AnchorName(ns.button))
 STUB.mounted = false
 STUB.Tick()
+ns.SetHideButtons(true)
 
 --------------------------------------------------------------------------------
 -- 12. HUD scale
@@ -268,9 +273,14 @@ STUB.Slash("mode banana")
 check("slash mode rejects nonsense", FarmMapDB.mode == "map")
 
 STUB.Slash("buttons")
-check("slash buttons toggles", FarmMapDB.hideButtons == true)
+check("slash buttons toggles", FarmMapDB.hideButtons == false)
 STUB.Slash("buttons")
-check("slash buttons toggles back", FarmMapDB.hideButtons == false)
+check("slash buttons toggles back", FarmMapDB.hideButtons == true)
+
+STUB.Slash("art")
+check("slash art toggles", FarmMapDB.hideMapArt == false)
+STUB.Slash("art")
+check("slash art toggles back", FarmMapDB.hideMapArt == true)
 
 STUB.Slash("ring")
 check("slash ring toggles", FarmMapDB.ring == false)
@@ -309,39 +319,57 @@ STUB.Slash("reset")
 restored(baseline, "reset restores while mounted")
 
 --------------------------------------------------------------------------------
--- 13b. Nodes only: hide the map, keep the blips
+-- 13b. Nodes only: fade the map, keep the blips, lose the compass ring
 --------------------------------------------------------------------------------
 ns.SetAlpha(0.45)
 check("not nodes only at 0.45", ns.IsNodesOnly() == false)
 ns.SetNodesOnly(true)
-check("nodes only sets map alpha to 0", FarmMapDB.alpha == 0, FarmMapDB.alpha)
+check("nodes only uses the known-good 0.1", FarmMapDB.alpha == 0.1, FarmMapDB.alpha)
 check("nodes only reports itself", ns.IsNodesOnly() == true)
 check("previous opacity remembered", FarmMapDB.prevAlpha == 0.45, FarmMapDB.prevAlpha)
 
 STUB.mounted = true
 STUB.Tick()
-check("map really goes to zero on screen", Minimap.alpha == 0, Minimap.alpha)
+check("map faded but not gone", Minimap.alpha == 0.1, Minimap.alpha)
+check("COMPASS RING HIDDEN", MinimapCompassTexture.shown == false)
+check("border ring hidden", MinimapBorder.shown == false)
 check("map still scaled and centred", Minimap.scale > 1.5 and STUB.AnchorName(Minimap) == "UIParent")
 STUB.mounted = false
 STUB.Tick()
+check("compass ring comes back", MinimapCompassTexture.shown == true)
+check("border ring comes back", MinimapBorder.shown == true)
 
 ns.SetNodesOnly(false)
 check("turning it off restores the old opacity", FarmMapDB.alpha == 0.45, FarmMapDB.alpha)
 
--- Never come back to an invisible map
-FarmMapDB.prevAlpha = 0
+-- Never come back to a map you cannot see
+FarmMapDB.prevAlpha = 0.1
 ns.SetNodesOnly(true)
 ns.SetNodesOnly(false)
-check("never restores to an invisible map", FarmMapDB.alpha == 0.6, FarmMapDB.alpha)
+check("never restores into the nodes-only band", FarmMapDB.alpha == 0.6, FarmMapDB.alpha)
 
-STUB.Slash("nodes")
-check("slash nodes turns it on", FarmMapDB.alpha == 0)
-STUB.Slash("nodes")
-check("slash nodes turns it off", FarmMapDB.alpha > 0, FarmMapDB.alpha)
+-- Opacity zero took the blips with it, so it is floored now
 STUB.Slash("alpha 0")
-check("slash alpha accepts 0", FarmMapDB.alpha == 0)
+check("alpha 0 is refused", FarmMapDB.alpha ~= 0, FarmMapDB.alpha)
+ns.SetAlpha(0)
+check("SetAlpha floors at the minimum", FarmMapDB.alpha == 0.05, FarmMapDB.alpha)
+
+ns.SetAlpha(0.45)   -- start from a visible map, or the toggle runs backwards
+STUB.Slash("nodes")
+check("slash nodes turns it on", FarmMapDB.alpha == 0.1, FarmMapDB.alpha)
+STUB.Slash("nodes")
+check("slash nodes turns it off", ns.IsNodesOnly() == false, FarmMapDB.alpha)
 STUB.Slash("alpha 0.45")
 check("slash alpha back", FarmMapDB.alpha == 0.45)
+
+-- Leaving the compass art alone is still possible
+ns.SetHideMapArt(false)
+STUB.mounted = true
+STUB.Tick()
+check("compass ring left alone when asked", MinimapCompassTexture.shown == true)
+STUB.mounted = false
+STUB.Tick()
+ns.SetHideMapArt(true)
 
 --------------------------------------------------------------------------------
 -- 14. Edit Mode and logout
@@ -378,19 +406,36 @@ MinimapCluster.scale = 1
 --------------------------------------------------------------------------------
 -- 16. SavedVariables migration. Runs last because it rewrites the DB.
 --------------------------------------------------------------------------------
--- A v1 profile: size doubled once, and moved off hidden buttons.
+-- A v1 profile: size doubled once.
 FarmMapDB = { enabled = true, size = 450, alpha = 0.6, button = {} }
 fire("ADDON_LOADED", "FarmMap")
 check("v1 size doubled to 900", FarmMapDB.size == 900, FarmMapDB.size)
-check("v1 stamped at version 3", FarmMapDB.dbVersion == 3, FarmMapDB.dbVersion)
+check("v1 stamped at version 4", FarmMapDB.dbVersion == 4, FarmMapDB.dbVersion)
 fire("ADDON_LOADED", "FarmMap")
 check("migration does not run twice", FarmMapDB.size == 900, FarmMapDB.size)
 
--- A v2 profile: size already doubled, but it hid the buttons. Move it to docking.
+-- A v2 profile: left exactly as the player had it.
 FarmMapDB = { dbVersion = 2, size = 900, hideButtons = true, button = {} }
 fire("ADDON_LOADED", "FarmMap")
 check("v2 size left alone", FarmMapDB.size == 900, FarmMapDB.size)
-check("v2 moved onto docking", FarmMapDB.hideButtons == false)
+check("v2 button preference left alone", FarmMapDB.hideButtons == true)
+
+-- A v3 profile: v3 flipped this to docking without being asked. Undo that.
+FarmMapDB = { dbVersion = 3, size = 900, alpha = 0.1, hideButtons = false, button = {} }
+fire("ADDON_LOADED", "FarmMap")
+check("V3 BUTTON FLIP IS UNDONE", FarmMapDB.hideButtons == true)
+check("v3 opacity left alone", FarmMapDB.alpha == 0.1, FarmMapDB.alpha)
+check("prevAlpha seeded above the nodes band", FarmMapDB.prevAlpha == 0.6, FarmMapDB.prevAlpha)
+
+-- A profile stuck at opacity zero, which hid the blips too.
+FarmMapDB = { dbVersion = 3, size = 900, alpha = 0, button = {} }
+fire("ADDON_LOADED", "FarmMap")
+check("opacity zero rescued to 0.1", FarmMapDB.alpha == 0.1, FarmMapDB.alpha)
+
+-- prevAlpha is seeded from what they actually use, not from the default.
+FarmMapDB = { dbVersion = 2, size = 900, alpha = 0.8, button = {} }
+fire("ADDON_LOADED", "FarmMap")
+check("prevAlpha seeded from their own opacity", FarmMapDB.prevAlpha == 0.8, FarmMapDB.prevAlpha)
 
 -- A custom size is doubled too, and clamped at the ceiling.
 FarmMapDB = { size = 1000, button = {} }
@@ -401,7 +446,7 @@ check("a big custom size clamps at 1600", FarmMapDB.size == 1600, FarmMapDB.size
 FarmMapDB = nil
 fire("ADDON_LOADED", "FarmMap")
 check("fresh install gets 900, not 1800", FarmMapDB.size == 900, FarmMapDB.size)
-check("fresh install docks buttons", FarmMapDB.hideButtons == false)
-check("fresh install is stamped", FarmMapDB.dbVersion == 3)
+check("fresh install hides buttons", FarmMapDB.hideButtons == true)
+check("fresh install is stamped", FarmMapDB.dbVersion == 4)
 
 FM_RESULT = { passes = passes, fails = table.concat(fails, "\n") }
