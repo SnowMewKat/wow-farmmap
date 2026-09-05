@@ -1,0 +1,9 @@
+## Interface: 120100
+## Title: FarmMap
+## Notes: Enlarged, centred, semi-transparent minimap while mounted or in Travel/Flight Form.
+## Author: Snow
+## Version: 1.0.0
+## SavedVariables: FarmMapDB
+## IconTexture: Interface\Icons\INV_Misc_Herb_07
+
+FarmMap.lua
