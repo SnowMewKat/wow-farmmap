@@ -39,10 +39,10 @@ local RING_TEXTURE = [[Interface\AddOns\FarmMap\Media\farmmap-ring]]
 local DEFAULTS = {
 	enabled     = true,
 	size        = 900,     -- on-screen width of the map circle, in UI units
-	alpha       = 0.6,
+	alpha       = NODES_ONLY_ALPHA,  -- nodes only out of the box
 	mode        = "map",   -- "map" or "cluster"
 	hideButtons = true,    -- true: hide buttons while flying. false: dock them
-	ring        = true,    -- draw the socket ring the docked buttons sit on
+	ring        = false,   -- socket ring behind docked buttons, off by default
 	hideMapArt  = true,    -- hide the compass and border rings while flying
 	hudScale    = 1.0,     -- scale of FarmMap's own UI (button and panel)
 	button      = { angle = 200, shown = true },

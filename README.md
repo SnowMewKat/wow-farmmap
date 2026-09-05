@@ -30,6 +30,11 @@ There is a minimap button on the ring. **Left click** toggles FarmMap on and
 off, **right click** opens the options panel, and you can **drag** it anywhere
 around the ring.
 
+The panel is deliberately five controls: Enabled, Nodes only, Move whole
+minimap, Map size, Map opacity, HUD scale. Four more used to live there and
+every one of them was a way to make the addon worse, so they moved to chat
+where they belong: `/farmmap test`, `buttons`, `art` and `ring`.
+
 | Command | Effect |
 |---|---|
 | `/farmmap` | Toggle on and off |
@@ -48,8 +53,8 @@ around the ring.
 | `/farmmap reset` | Force the minimap back to normal right now |
 | `/farmmap status` | Print the current state |
 
-Defaults: enabled, size 900, alpha 0.6, map mode, buttons hidden while flying,
-compass art hidden.
+Defaults, which are Snow's settings: enabled, nodes only (opacity 0.1), size
+900, map mode, buttons hidden while flying, compass art hidden, corner ring off.
 
 ## Nodes only, which is the point of the whole addon
 
@@ -168,7 +173,7 @@ from the four corners: only black connected to the edge becomes transparent.
 
 The real addon files are driven headlessly against a stub of the WoW API
 (`lupa`, a real Lua runtime), with the minimap laid out with real geometry so the
-furniture classification is genuinely exercised. 162 checks covering mount,
+furniture classification is genuinely exercised. 164 checks covering mount,
 dismount, all four travel forms, nodes-only mode, docking versus pin survival, the
 edge-clamped pin case, mode switching mid-flight, Edit Mode drift and scaling, the
 minimap button, every slash command, SavedVariables migration and logout. The core

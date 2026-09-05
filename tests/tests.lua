@@ -28,11 +28,12 @@ end
 fire("ADDON_LOADED", "FarmMap")
 check("default enabled", FarmMapDB.enabled == true)
 check("default size 900", FarmMapDB.size == 900, FarmMapDB.size)
-check("default alpha 0.6", FarmMapDB.alpha == 0.6, FarmMapDB.alpha)
+check("default alpha is nodes only", FarmMapDB.alpha == 0.1, FarmMapDB.alpha)
+check("default IS nodes only", ns.IsNodesOnly() == true)
 check("default mode map", FarmMapDB.mode == "map", FarmMapDB.mode)
 check("default hides buttons while flying", FarmMapDB.hideButtons == true)
 check("default hides the compass art", FarmMapDB.hideMapArt == true)
-check("default ring on", FarmMapDB.ring == true)
+check("default corner ring off", FarmMapDB.ring == false)
 check("default hudScale 1", FarmMapDB.hudScale == 1.0, FarmMapDB.hudScale)
 
 fire("PLAYER_LOGIN")
@@ -40,6 +41,12 @@ check("dock built", ns.dock ~= nil)
 check("dock starts hidden", ns.dock and ns.dock.shown == false)
 check("minimap button built", ns.button ~= nil)
 check("options panel built", ns.panel ~= nil)
+-- The panel is deliberately five controls. Anything more was a way to break it.
+local checkboxes = 0
+for _, child in ipairs({ ns.panel:GetChildren() }) do
+	if child.frameType == "CheckButton" then checkboxes = checkboxes + 1 end
+end
+check("panel has exactly three checkboxes", checkboxes == 3, checkboxes)
 
 local baseline = STUB.Snapshot()
 check("idle: minimap untouched", Minimap.scale == 1)
@@ -60,6 +67,7 @@ check("our own button is furniture", ns.IsFurniture(ns.button) == true)
 -- 3. Map mode: content goes to the centre, furniture stays in the corner
 --------------------------------------------------------------------------------
 ns.SetHideButtons(false)   -- docking is opt-in now, so ask for it explicitly
+ns.SetRing(true)
 STUB.mounted = true
 fire("PLAYER_MOUNT_DISPLAY_CHANGED")
 
@@ -107,6 +115,7 @@ restored(baseline, "dismount restores exactly")
 check("dock hidden again", ns.dock.shown == false)
 check("button back on the minimap", STUB.AnchorName(ns.button) == "Minimap", STUB.AnchorName(ns.button))
 ns.SetHideButtons(true)    -- back to the default
+ns.SetRing(false)
 
 --------------------------------------------------------------------------------
 -- 5. Hiding furniture instead of docking

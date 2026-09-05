@@ -167,11 +167,16 @@ local function MakeStepper(parent, label, x, y, step, minv, maxv, get, set, fmt)
 	refreshers[#refreshers + 1] = function() value:SetText(string.format(fmt, get())) end
 end
 
+-- Deliberately small. Four more checkboxes lived here and every one of them
+-- was a way to make the addon worse: two undid the look Snow actually wants,
+-- one added nothing, and one was a debugging switch. They are still reachable
+-- from chat (/farmmap test, buttons, art, ring) but they are not decisions
+-- worth putting in front of anyone.
 local function BuildPanel()
 	panel = CreateFrame("Frame", "FarmMapOptionsPanel", UIParent, "BackdropTemplate")
 	ns.panel = panel
 
-	panel:SetSize(300, 370)
+	panel:SetSize(300, 258)
 	panel:SetPoint("CENTER")
 	panel:SetFrameStrata("DIALOG")
 	panel:SetMovable(true)
@@ -209,29 +214,9 @@ local function BuildPanel()
 		function(v) ns.SetNodesOnly(v) end)
 
 	y = y - 28
-	MakeCheckbox(panel, "Force overlay on (test)", 20, y,
-		function() return ns.IsTest() end,
-		function(v) ns.SetTest(v) end)
-
-	y = y - 28
 	MakeCheckbox(panel, "Move whole minimap", 20, y,
 		function() return FarmMapDB.mode == "cluster" end,
 		function(v) ns.SetMode(v and "cluster" or "map") end)
-
-	y = y - 28
-	MakeCheckbox(panel, "Hide buttons instead of docking", 20, y,
-		function() return FarmMapDB.hideButtons end,
-		function(v) ns.SetHideButtons(v) end)
-
-	y = y - 28
-	MakeCheckbox(panel, "Hide compass and border rings", 20, y,
-		function() return FarmMapDB.hideMapArt end,
-		function(v) ns.SetHideMapArt(v) end)
-
-	y = y - 28
-	MakeCheckbox(panel, "Show the corner ring", 20, y,
-		function() return FarmMapDB.ring end,
-		function(v) ns.SetRing(v) end)
 
 	y = y - 36
 	MakeStepper(panel, "Map size", 24, y, 25, 100, 1600,
