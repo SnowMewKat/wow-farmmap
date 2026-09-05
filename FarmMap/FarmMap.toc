@@ -2,7 +2,7 @@
 ## Title: FarmMap
 ## Notes: Gathering nodes front and centre while you fly. Fades the map, keeps the blips, puts everything back when you dismount.
 ## Author: Snow
-## Version: 5.0.0
+## Version: 5.0.1
 ## SavedVariables: FarmMapDB
 ## IconTexture: Interface\AddOns\FarmMap\Media\farmmap-icon
 ## X-Category: Map & Minimap

@@ -71,6 +71,17 @@ The overlay never takes mouse input, so your camera and character controls
 work straight through it.
 
 Requires no other addons. %s
+
+How this was made
+-----------------
+FarmMap was written with AI assistance. I directed the design, tested every
+version in game, and made the calls about how it should behave. Claude
+(Anthropic) wrote the code and the tests. The minimap button icon was
+AI-generated and then converted to a game texture.
+
+No code, text or design was copied from another addon.
+
+MIT licensed, see LICENSE.txt.
 """
 
 

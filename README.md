@@ -214,6 +214,23 @@ MIT, see [LICENSE](LICENSE). It is declared in the TOC as `## X-License: MIT`,
 which is where CurseForge reads it from, and a copy ships inside the zip as
 `FarmMap/LICENSE.txt` so it travels with what people actually download.
 
+## How this was made
+
+FarmMap was written with AI assistance. Snow directed the design, tested every
+version in game, and made every call about how it should behave. Claude
+(Anthropic) wrote the code and the tests. The minimap button icon was
+AI-generated and then converted to a game texture by `tools/make_icon.py`.
+
+No code, text or design was copied from another addon. Two installed addons
+were read while building this, GatherMate2 and Leatrix_Plus, to establish how
+the current minimap API behaves in practice: that GatherMate2 positions its
+pins from `Minimap:GetWidth()`, and that Leatrix_Plus sizes the minimap with
+`MinimapCluster:SetScale()`. What was taken from them is factual knowledge
+about the API, not code.
+
+This section exists so the disclosure travels with the source rather than
+living only in a store listing.
+
 ## Known limits
 
 - A gathering pin created *while* the overlay is already up keeps its mouse
