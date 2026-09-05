@@ -309,6 +309,41 @@ STUB.Slash("reset")
 restored(baseline, "reset restores while mounted")
 
 --------------------------------------------------------------------------------
+-- 13b. Nodes only: hide the map, keep the blips
+--------------------------------------------------------------------------------
+ns.SetAlpha(0.45)
+check("not nodes only at 0.45", ns.IsNodesOnly() == false)
+ns.SetNodesOnly(true)
+check("nodes only sets map alpha to 0", FarmMapDB.alpha == 0, FarmMapDB.alpha)
+check("nodes only reports itself", ns.IsNodesOnly() == true)
+check("previous opacity remembered", FarmMapDB.prevAlpha == 0.45, FarmMapDB.prevAlpha)
+
+STUB.mounted = true
+STUB.Tick()
+check("map really goes to zero on screen", Minimap.alpha == 0, Minimap.alpha)
+check("map still scaled and centred", Minimap.scale > 1.5 and STUB.AnchorName(Minimap) == "UIParent")
+STUB.mounted = false
+STUB.Tick()
+
+ns.SetNodesOnly(false)
+check("turning it off restores the old opacity", FarmMapDB.alpha == 0.45, FarmMapDB.alpha)
+
+-- Never come back to an invisible map
+FarmMapDB.prevAlpha = 0
+ns.SetNodesOnly(true)
+ns.SetNodesOnly(false)
+check("never restores to an invisible map", FarmMapDB.alpha == 0.6, FarmMapDB.alpha)
+
+STUB.Slash("nodes")
+check("slash nodes turns it on", FarmMapDB.alpha == 0)
+STUB.Slash("nodes")
+check("slash nodes turns it off", FarmMapDB.alpha > 0, FarmMapDB.alpha)
+STUB.Slash("alpha 0")
+check("slash alpha accepts 0", FarmMapDB.alpha == 0)
+STUB.Slash("alpha 0.45")
+check("slash alpha back", FarmMapDB.alpha == 0.45)
+
+--------------------------------------------------------------------------------
 -- 14. Edit Mode and logout
 --------------------------------------------------------------------------------
 STUB.mounted = true

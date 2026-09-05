@@ -171,7 +171,7 @@ local function BuildPanel()
 	panel = CreateFrame("Frame", "FarmMapOptionsPanel", UIParent, "BackdropTemplate")
 	ns.panel = panel
 
-	panel:SetSize(300, 314)
+	panel:SetSize(300, 342)
 	panel:SetPoint("CENTER")
 	panel:SetFrameStrata("DIALOG")
 	panel:SetMovable(true)
@@ -204,6 +204,11 @@ local function BuildPanel()
 		function(v) ns.SetEnabled(v) end)
 
 	y = y - 28
+	MakeCheckbox(panel, "Nodes only (hide the map)", 20, y,
+		function() return ns.IsNodesOnly() end,
+		function(v) ns.SetNodesOnly(v) end)
+
+	y = y - 28
 	MakeCheckbox(panel, "Force overlay on (test)", 20, y,
 		function() return ns.IsTest() end,
 		function(v) ns.SetTest(v) end)
@@ -229,7 +234,7 @@ local function BuildPanel()
 		function(n) ns.SetSize(n) end, "%d")
 
 	y = y - 30
-	MakeStepper(panel, "Opacity", 24, y, 0.05, 0.1, 1.0,
+	MakeStepper(panel, "Map opacity", 24, y, 0.05, 0, 1.0,
 		function() return FarmMapDB.alpha end,
 		function(n) ns.SetAlpha(n) end, "%.2f")
 

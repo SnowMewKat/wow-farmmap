@@ -2,9 +2,9 @@
 
 A small, dependency-free WoW Retail addon. While you are mounted or in Druid
 Travel / Flight Form, it moves the minimap's contents to the centre of the
-screen, enlarged and semi-transparent, so gathering nodes are easy to see while
-flying. The minimap buttons stay home in the corner, and everything is put back
-the moment you dismount.
+screen, enlarged, so gathering nodes are front and centre while you fly. Turn the
+map opacity to zero and you get the nodes alone, no scrolling terrain. The minimap
+buttons stay home in the corner, and everything is put back the moment you dismount.
 
 Built and verified against **retail 12.1.0** (`## Interface: 120100`).
 
@@ -34,19 +34,35 @@ around the ring.
 |---|---|
 | `/farmmap` | Toggle on and off |
 | `/farmmap config` | Open the options panel |
+| `/farmmap nodes` | Nodes only: hide the map, keep the gathering blips |
 | `/farmmap test` | Force the overlay visible, ignoring mount state |
 | `/farmmap mode map` | Move only the map contents (default) |
 | `/farmmap mode cluster` | Move the whole minimap, zone text and buttons included |
 | `/farmmap buttons` | Dock the minimap buttons in the corner, or hide them outright |
 | `/farmmap ring` | Show or hide the corner socket ring |
 | `/farmmap size 900` | Width of the map circle in UI units, 100 to 1600 |
-| `/farmmap alpha 0.6` | Opacity, 0.1 to 1.0 |
+| `/farmmap alpha 0.6` | Map opacity, 0 to 1.0. Zero is nodes only |
 | `/farmmap hud 1.0` | Scale of FarmMap's own button and panel, 0.5 to 4.0 |
 | `/farmmap dump` | List the minimap's children and how each one is classified |
 | `/farmmap reset` | Force the minimap back to normal right now |
 | `/farmmap status` | Print the current state |
 
 Defaults: enabled, size 900, alpha 0.6, map mode, buttons docked, ring on.
+
+## Nodes only, which is the point of the whole addon
+
+Turn the map opacity down to zero and the terrain disappears, leaving the
+gathering blips hanging in space in the middle of the screen. The blips survive
+because the engine draws them separately from the map texture.
+
+This is better than a big translucent map, and not by a small margin. A map
+scrolling under your character while you fly is a motion sickness machine, and
+it is visual noise on top of the one thing you actually care about. With it
+gone, the ore and herb icons are the only thing on screen, exactly where your
+eyes already are.
+
+`/farmmap nodes`, or the first checkbox in the options panel. Turning it back
+off returns the map to whatever opacity you had before.
 
 ## Can it copy the inside of the minimap instead of moving it?
 
@@ -144,10 +160,10 @@ from the four corners: only black connected to the edge becomes transparent.
 
 The real addon files are driven headlessly against a stub of the WoW API
 (`lupa`, a real Lua runtime), with the minimap laid out with real geometry so the
-furniture classification is genuinely exercised. 136 checks covering mount,
-dismount, all four travel forms, docking versus pin survival, the edge-clamped
-pin case, mode switching mid-flight, Edit Mode drift and scaling, the minimap
-button, every slash command, SavedVariables migration and logout. The core
+furniture classification is genuinely exercised. 148 checks covering mount,
+dismount, all four travel forms, nodes-only mode, docking versus pin survival, the
+edge-clamped pin case, mode switching mid-flight, Edit Mode drift and scaling, the
+minimap button, every slash command, SavedVariables migration and logout. The core
 assertion is a diff proving everything is restored exactly.
 
 ```bash

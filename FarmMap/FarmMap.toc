@@ -2,7 +2,7 @@
 ## Title: FarmMap
 ## Notes: Enlarged, centred, semi-transparent minimap while mounted or in Travel/Flight Form.
 ## Author: Snow
-## Version: 3.0.0
+## Version: 3.1.0
 ## SavedVariables: FarmMapDB
 ## IconTexture: Interface\AddOns\FarmMap\Media\farmmap-icon
 

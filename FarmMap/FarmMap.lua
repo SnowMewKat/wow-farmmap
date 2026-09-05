@@ -37,6 +37,7 @@ local DEFAULTS = {
 	hideButtons = false,   -- false: dock buttons in the corner. true: hide them
 	ring        = true,    -- draw the socket ring the docked buttons sit on
 	hudScale    = 1.0,     -- scale of FarmMap's own UI (button and panel)
+	prevAlpha   = 0.6,     -- what to go back to when "nodes only" is turned off
 	button      = { angle = 200, shown = true },
 }
 
@@ -467,7 +468,27 @@ end
 
 function ns.SetAlpha(n)
 	FarmMapDB.alpha = n
+	if n > 0 then FarmMapDB.prevAlpha = n end
 	if active then ApplyLayout() end
+end
+
+-- Nodes only. Snow found this by hand and it is the best the addon looks:
+-- drop the map to nothing and the gathering blips are left hanging in space,
+-- front and centre, with no scrolling terrain underneath to cause motion
+-- sickness. The blips are drawn by the engine rather than being part of the
+-- map texture, which is why they survive.
+function ns.IsNodesOnly()
+	return (FarmMapDB.alpha or 0) <= 0.001
+end
+
+function ns.SetNodesOnly(on)
+	if on then
+		ns.SetAlpha(0)
+	else
+		local back = FarmMapDB.prevAlpha or 0.6
+		if back <= 0.001 then back = 0.6 end
+		ns.SetAlpha(back)
+	end
 end
 
 function ns.SetHudScale(n)
@@ -592,12 +613,19 @@ SlashCmdList["FARMMAP"] = function(msg)
 
 	elseif cmd == "alpha" then
 		local n = tonumber(rest)
-		if n and n > 0 and n <= 1 then
+		if n and n >= 0 and n <= 1 then
 			ns.SetAlpha(n)
-			Print("opacity set to " .. n .. ".")
+			Print("map opacity set to " .. n .. ".")
 		else
-			Print("usage: /farmmap alpha 0.1-1.0 (current: " .. FarmMapDB.alpha .. ")")
+			Print("usage: /farmmap alpha 0-1.0, 0 is nodes only (current: " .. FarmMapDB.alpha .. ")")
 		end
+
+	elseif cmd == "nodes" then
+		ns.SetNodesOnly(not ns.IsNodesOnly())
+		Print(ns.IsNodesOnly()
+			and "nodes only. The map is hidden, the gathering blips are not."
+			or ("map back at opacity " .. FarmMapDB.alpha .. "."))
+		if ns.RefreshOptions then ns.RefreshOptions() end
 
 	elseif cmd == "hud" then
 		local n = tonumber(rest)
@@ -643,6 +671,6 @@ SlashCmdList["FARMMAP"] = function(msg)
 			tostring(FarmMapDB.hudScale), tostring(IsMounted()), tostring(GetShapeshiftFormID())))
 
 	else
-		Print("commands: /farmmap (toggle), config, test, mode map|cluster, buttons, ring, size N, alpha N, hud N, dump, reset, status")
+		Print("commands: /farmmap (toggle), config, test, nodes, mode map|cluster, buttons, ring, size N, alpha N, hud N, dump, reset, status")
 	end
 end
